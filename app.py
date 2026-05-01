@@ -97,12 +97,13 @@ def reminder_scheduler():
     while True:
         try:
             with get_db() as conn:
+                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 due = conn.execute('''
                     SELECT r.*, t.title as ticket_title
                     FROM reminders r JOIN tickets t ON r.ticket_id = t.id
                     WHERE r.dismissed = 0 AND r.email_sent = 0
-                      AND r.remind_at <= datetime('now', 'localtime')
-                ''').fetchall()
+                      AND r.remind_at <= ?
+                ''', (now,)).fetchall()
                 for r in due:
                     send_email(
                         f"Reminder: {r['ticket_title']}",
@@ -358,9 +359,12 @@ Write a short, encouraging summary (3-4 sentences): what was accomplished, what'
 @login_required
 def create_reminder():
     d = request.json
+    remind_at = d['remind_at'].replace('T', ' ')
+    if len(remind_at) == 16:
+        remind_at += ':00'
     with get_db() as conn:
         cur = conn.execute('INSERT INTO reminders (ticket_id, remind_at, message) VALUES (?, ?, ?)',
-            (d['ticket_id'], d['remind_at'], d.get('message', '')))
+            (d['ticket_id'], remind_at, d.get('message', '')))
     return jsonify({'id': cur.lastrowid})
 
 @app.route('/api/reminders/<int:rid>/dismiss', methods=['POST'])
