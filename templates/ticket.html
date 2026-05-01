@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+{% block title %}{{ ticket.title }} — Kevin's Board{% endblock %}
+{% block content %}
+
+<div class="ticket-page">
+  <div class="ticket-page-header">
+    <a href="/board" class="back-link">← Board</a>
+    <div class="ticket-page-actions">
+      <button class="btn btn-danger" onclick="deleteTicket({{ ticket.id }})">Delete</button>
+    </div>
+  </div>
+
+  <div class="ticket-page-body">
+
+    <!-- Left: ticket detail -->
+    <div class="ticket-detail">
+      <div class="ticket-title-row">
+        <input type="text" class="ticket-title-input" value="{{ ticket.title }}" onblur="saveField('title', this.value)" id="ticket-title">
+      </div>
+
+      <div class="ticket-fields">
+        <div class="field-row">
+          <label>Status</label>
+          <select onchange="saveField('status', this.value)">
+            {% for s in statuses %}<option value="{{ s }}" {% if ticket.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-row">
+          <label>Priority</label>
+          <select onchange="saveField('priority', this.value)">
+            {% for p in priorities %}<option value="{{ p }}" {% if ticket.priority == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-row">
+          <label>Project</label>
+          <select onchange="saveField('project_id', this.value)">
+            <option value="">No Project</option>
+            {% for p in projects %}<option value="{{ p.id }}" {% if ticket.project_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-row">
+          <label>Due Date</label>
+          <input type="date" value="{{ ticket.due_date or '' }}" onchange="saveField('due_date', this.value)">
+        </div>
+      </div>
+
+      <div class="ticket-desc-section">
+        <label>Description</label>
+        <textarea class="ticket-desc" rows="5" onblur="saveField('description', this.value)" placeholder="Add a description...">{{ ticket.description or '' }}</textarea>
+      </div>
+
+      <!-- Reminders -->
+      <div class="reminders-section">
+        <div class="section-header">
+          <h3>🔔 Reminders</h3>
+          <button class="btn btn-sm" onclick="showAddReminder()">+ Add</button>
+        </div>
+        <div id="reminder-list">
+          {% for r in reminders %}
+          <div class="reminder-row {% if r.dismissed %}dismissed{% endif %}" id="rem-{{ r.id }}">
+            <span>{{ r.remind_at }} — {{ r.message or 'No message' }}</span>
+            {% if not r.dismissed %}<button class="btn-icon" onclick="dismissReminder({{ r.id }})">✓</button>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div id="add-reminder-form" class="hidden">
+          <input type="datetime-local" id="rem-time">
+          <input type="text" id="rem-msg" placeholder="Reminder message (optional)">
+          <div class="modal-actions">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('add-reminder-form').classList.add('hidden')">Cancel</button>
+            <button class="btn btn-primary btn-sm" onclick="addReminder()">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Claude chat -->
+    <div class="ticket-chat">
+      <div class="chat-header">
+        <span>🤖 Chat with Claude</span>
+        <small>Ask about this ticket</small>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        {% for m in messages %}
+        <div class="chat-msg chat-msg-{{ m.role }}">
+          <div class="chat-bubble">{{ m.content }}</div>
+        </div>
+        {% endfor %}
+        {% if not messages %}
+        <div class="chat-empty">Ask Claude anything about this ticket — how to approach it, break it down, or get suggestions.</div>
+        {% endif %}
+      </div>
+      <div class="chat-input-row">
+        <textarea id="chat-input" placeholder="Ask Claude..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+        <button class="btn btn-primary" onclick="sendChat()" id="chat-send">Send</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const TICKET_ID = {{ ticket.id }};
+
+function saveField(field, value) {
+  fetch(`/api/tickets/${TICKET_ID}`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({[field]: value || null})
+  });
+}
+
+function deleteTicket(id) {
+  if (!confirm('Delete this ticket?')) return;
+  fetch(`/api/tickets/${id}`, {method:'DELETE'}).then(() => location.href='/');
+}
+
+function showAddReminder() {
+  document.getElementById('add-reminder-form').classList.remove('hidden');
+}
+
+function addReminder() {
+  const time = document.getElementById('rem-time').value;
+  const msg = document.getElementById('rem-msg').value;
+  if (!time) return alert('Please set a time');
+  fetch('/api/reminders', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ticket_id: TICKET_ID, remind_at: time, message: msg})
+  }).then(() => location.reload());
+}
+
+function dismissReminder(id) {
+  fetch(`/api/reminders/${id}/dismiss`, {method:'POST'})
+    .then(() => {
+      const el = document.getElementById(`rem-${id}`);
+      if (el) el.classList.add('dismissed');
+    });
+}
+
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  appendMsg('user', msg);
+  input.value = '';
+  document.getElementById('chat-send').disabled = true;
+
+  const thinking = appendMsg('assistant', '...');
+
+  fetch(`/api/tickets/${TICKET_ID}/chat`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({message: msg})
+  })
+  .then(r => r.json())
+  .then(d => {
+    thinking.querySelector('.chat-bubble').textContent = d.reply;
+    document.getElementById('chat-send').disabled = false;
+  });
+}
+
+function appendMsg(role, text) {
+  const box = document.getElementById('chat-messages');
+  const empty = box.querySelector('.chat-empty');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = `chat-msg chat-msg-${role}`;
+  div.innerHTML = `<div class="chat-bubble">${text}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+// Scroll to bottom of chat on load
+document.getElementById('chat-messages').scrollTop = 999999;
+</script>
+{% endblock %}

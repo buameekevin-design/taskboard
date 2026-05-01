@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Kevin's Board{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="nav-brand">⬛ Kevin's Board</a>
+  <div class="nav-links">
+    <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">Dashboard</a>
+    <a href="/board" class="nav-link {% if request.path == '/board' %}active{% endif %}">Board</a>
+    <a href="/marketing" class="nav-link {% if request.path == '/marketing' %}active{% endif %}">Marketing</a>
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">◐</button>
+    <a href="/logout" class="nav-link" title="Logout">🚪</a>
+  </div>
+</nav>
+
+{% if reminders is defined and reminders %}
+<div class="reminder-banner">
+  {% for r in reminders %}
+  <div class="reminder-item" id="reminder-{{ r.id }}">
+    <span>🔔 <strong>{{ r.ticket_title }}</strong> — {{ r.message or 'Reminder due' }}</span>
+    <button onclick="dismissReminder({{ r.id }})">Dismiss</button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<main class="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+<div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()"></div>
+<div id="modal" class="modal hidden">
+  <div id="modal-content"></div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+function toggleTheme() {
+  const html = document.documentElement;
+  html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('theme', html.dataset.theme);
+}
+const saved = localStorage.getItem('theme');
+if (saved) document.documentElement.dataset.theme = saved;
+
+function dismissReminder(id) {
+  fetch(`/api/reminders/${id}/dismiss`, {method:'POST'})
+    .then(() => document.getElementById(`reminder-${id}`).remove());
+}
+
+setInterval(() => {
+  fetch('/api/reminders/pending')
+    .then(r => r.json())
+    .then(reminders => {
+      reminders.forEach(r => {
+        if (!document.getElementById(`reminder-${r.id}`)) {
+          if (Notification.permission === 'granted') {
+            new Notification(`🔔 ${r.ticket_title}`, {body: r.message || 'Reminder due'});
+          }
+        }
+      });
+    });
+}, 60000);
+
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+</script>
+</body>
+</html>

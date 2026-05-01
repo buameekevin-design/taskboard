@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — Kevin's Board{% endblock %}
+{% block content %}
+
+<div class="dashboard">
+
+  <!-- Header row -->
+  <div class="dash-header">
+    <h1 class="dash-title">Dashboard</h1>
+    <div class="dash-actions">
+      <button class="btn btn-secondary" onclick="showWeeklySummary()">📋 Weekly Summary</button>
+      <button class="btn btn-secondary" onclick="showSuggest()">🤖 What should I do next?</button>
+      <button class="btn btn-primary" onclick="showNewTicket()">+ New Ticket</button>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div class="stats-row">
+    {% set ns = namespace(backlog=0, inprog=0, review=0, done=0) %}
+    {% for t in tickets %}
+      {% if t.status == 'Backlog' %}{% set ns.backlog = ns.backlog + 1 %}{% endif %}
+      {% if t.status == 'In Progress' %}{% set ns.inprog = ns.inprog + 1 %}{% endif %}
+      {% if t.status == 'Review' %}{% set ns.review = ns.review + 1 %}{% endif %}
+      {% if t.status == 'Done' %}{% set ns.done = ns.done + 1 %}{% endif %}
+    {% endfor %}
+    <div class="stat-card"><div class="stat-num">{{ ns.backlog }}</div><div class="stat-label">Backlog</div></div>
+    <div class="stat-card"><div class="stat-num">{{ ns.inprog }}</div><div class="stat-label">In Progress</div></div>
+    <div class="stat-card"><div class="stat-num">{{ ns.review }}</div><div class="stat-label">Review</div></div>
+    <div class="stat-card"><div class="stat-num">{{ ns.done }}</div><div class="stat-label">Done</div></div>
+  </div>
+
+  <div class="dash-body">
+
+    <!-- Left col -->
+    <div class="dash-left">
+
+      <!-- Due soon -->
+      {% if due_soon %}
+      <section class="dash-section">
+        <h2 class="section-title">⚠️ Due Soon</h2>
+        <div class="ticket-list">
+          {% for t in due_soon %}
+          <a href="/ticket/{{ t.id }}" class="ticket-card priority-{{ t.priority|lower }}">
+            <div class="ticket-top">
+              <span class="ticket-title">{{ t.title }}</span>
+              <span class="badge badge-{{ t.priority|lower }}">{{ t.priority }}</span>
+            </div>
+            <div class="ticket-meta">
+              {% if t.project_name %}<span class="project-dot" style="background:{{ t.project_color }}"></span> {{ t.project_name }}{% endif %}
+              <span class="due-date {% if t.due_date < today %}overdue{% endif %}">📅 {{ t.due_date }}</span>
+              <span class="status-badge">{{ t.status }}</span>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      <!-- All tickets -->
+      <section class="dash-section">
+        <h2 class="section-title">All Tickets</h2>
+        <div class="filter-bar">
+          <select id="filter-project" onchange="filterTickets()">
+            <option value="">All Projects</option>
+            {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+          </select>
+          <select id="filter-status" onchange="filterTickets()">
+            <option value="">All Statuses</option>
+            {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          </select>
+          <select id="filter-priority" onchange="filterTickets()">
+            <option value="">All Priorities</option>
+            {% for p in priorities %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="ticket-list" id="ticket-list">
+          {% for t in tickets %}
+          <a href="/ticket/{{ t.id }}" class="ticket-card priority-{{ t.priority|lower }}"
+             data-project="{{ t.project_id }}" data-status="{{ t.status }}" data-priority="{{ t.priority }}">
+            <div class="ticket-top">
+              <span class="ticket-title">{{ t.title }}</span>
+              <span class="badge badge-{{ t.priority|lower }}">{{ t.priority }}</span>
+            </div>
+            <div class="ticket-meta">
+              {% if t.project_name %}<span class="project-dot" style="background:{{ t.project_color }}"></span> {{ t.project_name }}{% endif %}
+              {% if t.due_date %}<span class="due-date">📅 {{ t.due_date }}</span>{% endif %}
+              <span class="status-badge">{{ t.status }}</span>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <!-- Right col: projects -->
+    <div class="dash-right">
+      <section class="dash-section">
+        <div class="section-header">
+          <h2 class="section-title">Projects</h2>
+          <button class="btn btn-sm" onclick="showNewProject()">+ Add</button>
+        </div>
+        <div class="project-list">
+          {% for p in projects %}
+          <div class="project-item">
+            <span class="project-dot" style="background:{{ p.color }}"></span>
+            <a href="/board?project_id={{ p.id }}" class="project-name">{{ p.name }}</a>
+            <button class="btn-icon" onclick="deleteProject({{ p.id }}, event)" title="Delete">✕</button>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+  </div>
+</div>
+
+<!-- AI result panel -->
+<div id="ai-panel" class="ai-panel hidden">
+  <div class="ai-panel-header">
+    <span id="ai-panel-title">🤖 Claude</span>
+    <button onclick="document.getElementById('ai-panel').classList.add('hidden')">✕</button>
+  </div>
+  <div id="ai-panel-body" class="ai-panel-body">Thinking...</div>
+</div>
+
+<!-- New Ticket Modal -->
+<div id="new-ticket-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>New Ticket</h2>
+    <form onsubmit="createTicket(event)">
+      <label>Title *</label>
+      <input type="text" id="nt-title" required>
+      <label>Project</label>
+      <select id="nt-project">
+        <option value="">No Project</option>
+        {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+      <label>Status</label>
+      <select id="nt-status">
+        {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+      </select>
+      <label>Priority</label>
+      <select id="nt-priority">
+        {% for p in priorities %}<option value="{{ p }}" {% if p=='Medium' %}selected{% endif %}>{{ p }}</option>{% endfor %}
+      </select>
+      <label>Due Date</label>
+      <input type="date" id="nt-due">
+      <label>Description</label>
+      <textarea id="nt-desc" rows="3"></textarea>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-ticket-modal').classList.add('hidden')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- New Project Modal -->
+<div id="new-project-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>New Project</h2>
+    <form onsubmit="createProject(event)">
+      <label>Name *</label>
+      <input type="text" id="np-name" required>
+      <label>Color</label>
+      <input type="color" id="np-color" value="#4A9EFF">
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-project-modal').classList.add('hidden')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const today = '{{ today }}';
+
+function showNewTicket() { document.getElementById('new-ticket-modal').classList.remove('hidden'); }
+function showNewProject() { document.getElementById('new-project-modal').classList.remove('hidden'); }
+
+function filterTickets() {
+  const proj = document.getElementById('filter-project').value;
+  const status = document.getElementById('filter-status').value;
+  const prio = document.getElementById('filter-priority').value;
+  document.querySelectorAll('#ticket-list .ticket-card').forEach(card => {
+    const match = (!proj || card.dataset.project == proj) &&
+                  (!status || card.dataset.status == status) &&
+                  (!prio || card.dataset.priority == prio);
+    card.style.display = match ? '' : 'none';
+  });
+}
+
+function createTicket(e) {
+  e.preventDefault();
+  fetch('/api/tickets', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title: document.getElementById('nt-title').value,
+      project_id: document.getElementById('nt-project').value || null,
+      status: document.getElementById('nt-status').value,
+      priority: document.getElementById('nt-priority').value,
+      due_date: document.getElementById('nt-due').value || null,
+      description: document.getElementById('nt-desc').value
+    })
+  }).then(() => location.reload());
+}
+
+function createProject(e) {
+  e.preventDefault();
+  fetch('/api/projects', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      name: document.getElementById('np-name').value,
+      color: document.getElementById('np-color').value
+    })
+  }).then(() => location.reload());
+}
+
+function deleteProject(id, e) {
+  e.preventDefault();
+  if (!confirm('Delete this project?')) return;
+  fetch(`/api/projects/${id}`, {method:'DELETE'}).then(() => location.reload());
+}
+
+function showAI(title, url) {
+  const panel = document.getElementById('ai-panel');
+  document.getElementById('ai-panel-title').textContent = title;
+  document.getElementById('ai-panel-body').textContent = 'Thinking...';
+  panel.classList.remove('hidden');
+  fetch(url).then(r => r.json()).then(d => {
+    document.getElementById('ai-panel-body').textContent = d.reply;
+  });
+}
+
+function showSuggest() { showAI('🤖 What should I do next?', '/api/suggest'); }
+function showWeeklySummary() { showAI('📋 Weekly Summary', '/api/weekly-summary'); }
+</script>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block title %}Board — Kevin's Board{% endblock %}
+{% block content %}
+
+<div class="board-page">
+  <div class="board-header">
+    <h1 class="dash-title">Kanban Board</h1>
+    <div class="dash-actions">
+      <select onchange="location.href='/board?project_id='+this.value">
+        <option value="" {% if not selected_project %}selected{% endif %}>All Projects</option>
+        {% for p in projects %}<option value="{{ p.id }}" {% if selected_project == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" onclick="showNewTicketBoard()">+ New Ticket</button>
+    </div>
+  </div>
+
+  <div class="kanban-board">
+    {% for status in statuses %}
+    <div class="kanban-col">
+      <div class="kanban-col-header">
+        <span class="kanban-col-title">{{ status }}</span>
+        <span class="kanban-col-count">{{ by_status[status]|length }}</span>
+      </div>
+      <div class="kanban-cards" id="col-{{ status|replace(' ','-') }}" ondragover="event.preventDefault()" ondrop="drop(event, '{{ status }}')">
+        {% for t in by_status[status] %}
+        <div class="kanban-card priority-{{ t.priority|lower }}" draggable="true" ondragstart="drag(event, {{ t.id }})" onclick="location.href='/ticket/{{ t.id }}'">
+          <div class="kanban-card-title">{{ t.title }}</div>
+          <div class="kanban-card-meta">
+            {% if t.project_name %}<span class="project-dot" style="background:{{ t.project_color }}"></span> {{ t.project_name }}{% endif %}
+            <span class="badge badge-{{ t.priority|lower }}">{{ t.priority }}</span>
+            {% if t.due_date %}<span class="due-date">📅 {{ t.due_date }}</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- New Ticket Modal -->
+<div id="new-ticket-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>New Ticket</h2>
+    <form onsubmit="createTicket(event)">
+      <label>Title *</label>
+      <input type="text" id="nt-title" required>
+      <label>Project</label>
+      <select id="nt-project">
+        <option value="">No Project</option>
+        {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+      <label>Status</label>
+      <select id="nt-status">
+        {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+      </select>
+      <label>Priority</label>
+      <select id="nt-priority">
+        {% for p in priorities %}<option value="{{ p }}" {% if p=='Medium' %}selected{% endif %}>{{ p }}</option>{% endfor %}
+      </select>
+      <label>Due Date</label>
+      <input type="date" id="nt-due">
+      <label>Description</label>
+      <textarea id="nt-desc" rows="3"></textarea>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-ticket-modal').classList.add('hidden')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showNewTicketBoard() { document.getElementById('new-ticket-modal').classList.remove('hidden'); }
+
+function drag(event, id) { event.dataTransfer.setData('ticketId', id); }
+
+function drop(event, status) {
+  const id = event.dataTransfer.getData('ticketId');
+  fetch(`/api/tickets/${id}`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({status})
+  }).then(() => location.reload());
+}
+
+function createTicket(e) {
+  e.preventDefault();
+  fetch('/api/tickets', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title: document.getElementById('nt-title').value,
+      project_id: document.getElementById('nt-project').value || null,
+      status: document.getElementById('nt-status').value,
+      priority: document.getElementById('nt-priority').value,
+      due_date: document.getElementById('nt-due').value || null,
+      description: document.getElementById('nt-desc').value
+    })
+  }).then(() => location.reload());
+}
+</script>
+{% endblock %}
