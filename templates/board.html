@@ -62,6 +62,9 @@
       <input type="date" id="nt-due">
       <label>Description</label>
       <textarea id="nt-desc" rows="3"></textarea>
+      <label>Reminder (optional)</label>
+      <input type="datetime-local" id="nt-reminder-time">
+      <input type="text" id="nt-reminder-msg" placeholder="Reminder message (optional)">
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="document.getElementById('new-ticket-modal').classList.add('hidden')">Cancel</button>
         <button type="submit" class="btn btn-primary">Create</button>
@@ -86,6 +89,8 @@ function drop(event, status) {
 
 function createTicket(e) {
   e.preventDefault();
+  const reminderTime = document.getElementById('nt-reminder-time').value;
+  const reminderMsg = document.getElementById('nt-reminder-msg').value;
   fetch('/api/tickets', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -97,6 +102,14 @@ function createTicket(e) {
       due_date: document.getElementById('nt-due').value || null,
       description: document.getElementById('nt-desc').value
     })
+  }).then(r => r.json()).then(data => {
+    if (reminderTime && data.id) {
+      return fetch('/api/reminders', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ticket_id: data.id, remind_at: reminderTime, message: reminderMsg})
+      });
+    }
   }).then(() => location.reload());
 }
 </script>

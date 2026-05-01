@@ -70,6 +70,7 @@ def init_db():
                 remind_at TEXT NOT NULL,
                 message TEXT DEFAULT '',
                 dismissed INTEGER DEFAULT 0,
+                email_sent INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now'))
             );
         ''')
@@ -83,6 +84,36 @@ def init_db():
             ])
 
 init_db()
+
+# Migrate existing DB to add email_sent column if missing
+with get_db() as _conn:
+    try:
+        _conn.execute('ALTER TABLE reminders ADD COLUMN email_sent INTEGER DEFAULT 0')
+    except Exception:
+        pass
+
+def reminder_scheduler():
+    import time
+    while True:
+        try:
+            with get_db() as conn:
+                due = conn.execute('''
+                    SELECT r.*, t.title as ticket_title
+                    FROM reminders r JOIN tickets t ON r.ticket_id = t.id
+                    WHERE r.dismissed = 0 AND r.email_sent = 0
+                      AND r.remind_at <= datetime('now', 'localtime')
+                ''').fetchall()
+                for r in due:
+                    send_email(
+                        f"Reminder: {r['ticket_title']}",
+                        f"Reminder for ticket: {r['ticket_title']}\n\n{r['message'] or 'No message'}\n\nScheduled for: {r['remind_at']}"
+                    )
+                    conn.execute('UPDATE reminders SET email_sent = 1 WHERE id = ?', (r['id'],))
+        except Exception as e:
+            print(f'Scheduler error: {e}')
+        time.sleep(60)
+
+threading.Thread(target=reminder_scheduler, daemon=True).start()
 
 def login_required(f):
     @wraps(f)
@@ -330,11 +361,6 @@ def create_reminder():
     with get_db() as conn:
         cur = conn.execute('INSERT INTO reminders (ticket_id, remind_at, message) VALUES (?, ?, ?)',
             (d['ticket_id'], d['remind_at'], d.get('message', '')))
-        ticket = conn.execute('SELECT title FROM tickets WHERE id = ?', (d['ticket_id'],)).fetchone()
-    threading.Thread(target=send_email,
-        args=(f"Reminder set: {ticket['title']}",
-              f"Reminder scheduled for {d['remind_at']}\n\n{d.get('message','')}")
-    ).start()
     return jsonify({'id': cur.lastrowid})
 
 @app.route('/api/reminders/<int:rid>/dismiss', methods=['POST'])
