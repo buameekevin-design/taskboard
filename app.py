@@ -17,17 +17,21 @@ PASSWORD_HASH = generate_password_hash('0410598711Kk@')
 
 def send_email(subject, body):
     if not GMAIL_USER or not GMAIL_PASS or not NOTIFY_EMAIL:
-        return
+        print(f'Email skipped: GMAIL_USER={bool(GMAIL_USER)}, GMAIL_PASS={bool(GMAIL_PASS)}, NOTIFY_EMAIL={bool(NOTIFY_EMAIL)}')
+        return False
     try:
         msg = MIMEText(body)
         msg['Subject'] = subject
         msg['From'] = GMAIL_USER
         msg['To'] = NOTIFY_EMAIL
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
-            s.login(GMAIL_USER, GMAIL_PASS)
+            s.login(GMAIL_USER, GMAIL_PASS.replace(' ', ''))
             s.sendmail(GMAIL_USER, NOTIFY_EMAIL, msg.as_string())
+        print(f'Email sent: {subject}')
+        return True
     except Exception as e:
         print(f'Email error: {e}')
+        return False
 
 STATUSES = ['Backlog', 'In Progress', 'Review', 'Done']
 PRIORITIES = ['Low', 'Medium', 'High']
@@ -354,6 +358,18 @@ Still open:
 Write a short, encouraging summary (3-4 sentences): what was accomplished, what's still on the plate, and one motivating thought for the week ahead."""}]
     )
     return jsonify({'reply': resp.content[0].text})
+
+@app.route('/api/test-email')
+@login_required
+def test_email():
+    ok = send_email('Taskboard test email', 'If you see this, email is working!')
+    return jsonify({
+        'sent': ok,
+        'gmail_user_set': bool(GMAIL_USER),
+        'gmail_pass_set': bool(GMAIL_PASS),
+        'notify_email_set': bool(NOTIFY_EMAIL),
+        'notify_email': NOTIFY_EMAIL
+    })
 
 @app.route('/api/reminders', methods=['POST'])
 @login_required
