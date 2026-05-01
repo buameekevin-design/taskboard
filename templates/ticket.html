@@ -120,9 +120,10 @@ function showAddReminder() {
 }
 
 function addReminder() {
-  const time = document.getElementById('rem-time').value;
+  const localTime = document.getElementById('rem-time').value;
   const msg = document.getElementById('rem-msg').value;
-  if (!time) return alert('Please set a time');
+  if (!localTime) return alert('Please set a time');
+  const time = new Date(localTime).toISOString().slice(0,19).replace('T',' ');
   fetch('/api/reminders', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},

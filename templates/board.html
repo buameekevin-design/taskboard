@@ -89,7 +89,8 @@ function drop(event, status) {
 
 function createTicket(e) {
   e.preventDefault();
-  const reminderTime = document.getElementById('nt-reminder-time').value;
+  const reminderLocal = document.getElementById('nt-reminder-time').value;
+  const reminderTime = reminderLocal ? new Date(reminderLocal).toISOString().slice(0,19).replace('T',' ') : '';
   const reminderMsg = document.getElementById('nt-reminder-msg').value;
   fetch('/api/tickets', {
     method: 'POST',

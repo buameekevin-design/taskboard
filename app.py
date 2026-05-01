@@ -97,7 +97,7 @@ def reminder_scheduler():
     while True:
         try:
             with get_db() as conn:
-                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
                 due = conn.execute('''
                     SELECT r.*, t.title as ticket_title
                     FROM reminders r JOIN tickets t ON r.ticket_id = t.id
