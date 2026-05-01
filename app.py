@@ -16,21 +16,23 @@ NOTIFY_EMAIL = os.environ.get('NOTIFY_EMAIL', '')
 PASSWORD_HASH = generate_password_hash('0410598711Kk@')
 
 def send_email(subject, body):
+    print(f'>>> send_email called: {subject}', flush=True)
     if not GMAIL_USER or not GMAIL_PASS or not NOTIFY_EMAIL:
-        print(f'Email skipped: GMAIL_USER={bool(GMAIL_USER)}, GMAIL_PASS={bool(GMAIL_PASS)}, NOTIFY_EMAIL={bool(NOTIFY_EMAIL)}')
+        print(f'>>> Email skipped: GMAIL_USER={bool(GMAIL_USER)}, GMAIL_PASS={bool(GMAIL_PASS)}, NOTIFY_EMAIL={bool(NOTIFY_EMAIL)}', flush=True)
         return False
     try:
         msg = MIMEText(body)
         msg['Subject'] = subject
         msg['From'] = GMAIL_USER
         msg['To'] = NOTIFY_EMAIL
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+        print(f'>>> Connecting to Gmail SMTP...', flush=True)
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10) as s:
             s.login(GMAIL_USER, GMAIL_PASS.replace(' ', ''))
             s.sendmail(GMAIL_USER, NOTIFY_EMAIL, msg.as_string())
-        print(f'Email sent: {subject}')
+        print(f'>>> Email sent successfully: {subject}', flush=True)
         return True
     except Exception as e:
-        print(f'Email error: {e}')
+        print(f'Email error: {e}', flush=True)
         return False
 
 STATUSES = ['Backlog', 'In Progress', 'Review', 'Done']
